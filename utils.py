@@ -533,4 +533,3 @@ def check_ocr_box(image_path, display_img = True, output_bb_format='xywh', goal_
     return (text, bb), goal_filtering
 
 
-

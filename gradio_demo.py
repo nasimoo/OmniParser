@@ -13,7 +13,11 @@ import torch
 from PIL import Image
 import argparse
 
-
+import torch
+model_path = 'weights/icon_detect_v1_5/model_v1_5.pt'
+ckpt = torch.load(model_path, map_location='cpu')
+print(type(ckpt))
+print(ckpt.keys() if isinstance(ckpt, dict) else "Not a dictionary")
 
 MARKDOWN = """
 # OmniParser for Pure Vision Based General GUI Agent 🔥
