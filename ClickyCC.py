@@ -1,24 +1,58 @@
+import cv2
+import serial
+import time
 import csv
 import ast
-import time
-import serial
-from PIL import ImageGrab
-import cv2
-import numpy as np
 
-class BBClickBLE:
-    def __init__(self, csv_file_path, bluetooth_com_port, baud_rate):
-        self.csv_file_path = csv_file_path
-        self.screen_width, self.screen_height = 1920, 1080  # Adjust as necessary
-        self.bluetooth_com_port = bluetooth_com_port
-        self.baud_rate = baud_rate
-        self.ser = self.initialize_serial_connection()
+# BLE Configuration
+BLUETOOTH_COM_PORT = "COM4"
+BAUD_RATE = 115200
 
-    def initialize_serial_connection(self):
-        """Initialize the BLE serial connection."""
+# Screen and Display Configuration
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+DISPLAY_WIDTH = 960
+DISPLAY_HEIGHT = 540
+
+# CSV File Path
+CSV_FILE_PATH = "output/gmailoptions_bbox_content.csv"
+
+
+# Basic offset
+BASE_X_OFFSET = -10
+Y_OFFSET = -10
+
+def calculate_x_offset(x):
+    """Calculate progressive X offset based on X coordinate"""
+    try:
+        offset = BASE_X_OFFSET
+        offset += -2 * (x // 400)  # Adjust offset calculation as needed
+        return int(offset)  # Ensure the result is an integer
+    except Exception as e:
+        print(f"Error in calculate_x_offset with x={x}: {e}")
+        return 0  # Default to 0 if there's an issue
+
+
+def calculate_y_offset(y):
+    """Calculate progressive Y offset based on Y coordinate"""
+    try:
+        offset = Y_OFFSET
+        offset += 1 * (y // 300)  # Adjust offset calculation as needed
+        return int(offset)  # Ensure the result is an integer
+    except Exception as e:
+        print(f"Error in calculate_y_offset with y={y}: {e}")
+        return 0  # Default to 0 if there's an issue
+
+
+    
+class ClickableDS:
+    def __init__(self, com_port, baud_rate):
+        self.ser = self.initialize_serial_connection(com_port, baud_rate)
+
+    def initialize_serial_connection(self, com_port, baud_rate):
         try:
-            ser = serial.Serial(self.bluetooth_com_port, self.baud_rate, timeout=1)
-            time.sleep(2)  # Give BLE some time to settle
+            ser = serial.Serial(com_port, baud_rate, timeout=1)
+            time.sleep(2)
             print("Connected to BLE device")
             return ser
         except Exception as e:
@@ -26,7 +60,6 @@ class BBClickBLE:
             return None
 
     def send_command(self, cmd):
-        """Send a command string over BLE."""
         if self.ser:
             try:
                 self.ser.write((cmd + "\n").encode('utf-8'))
@@ -35,87 +68,76 @@ class BBClickBLE:
             except Exception as e:
                 print(f"Failed to send command: {e}")
 
-    def is_bbox_visible(self, bbox):
-        """Check if the bounding box is visible on the screen."""
-        x_min = int(bbox[0] * self.screen_width)
-        y_min = int(bbox[1] * self.screen_height)
-        x_max = int(bbox[2] * self.screen_width)
-        y_max = int(bbox[3] * self.screen_height)
+    def move_to_origin(self):
+        self.send_command("ABS:0,0")
+        time.sleep(0.5)
 
-        # Capture the screen
-        screen = ImageGrab.grab()
-        screen_np = np.array(screen)
-        roi = screen_np[y_min:y_max, x_min:x_max]
+    def send_keyboard_input(self, text):
+        """
+        Sends a string of text as keyboard input.
+        """
+        if self.ser:
+            try:
+                self.send_command(f"kbd:{text}")
+                print(f"Keyboard input sent: {text}")
+            except Exception as e:
+                print(f"Failed to send keyboard input: {e}")
 
-        if roi.size == 0:
-            return False
+    def press_f11(self):
+        """
+        Sends the F11 key press command.
+        """
+        self.send_command("f11")
+        print("F11 key pressed.")
 
-        gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        non_zero_count = cv2.countNonZero(gray_roi)
+def find_bounding_box_by_id(specific_id):
+    try:
+        with open(CSV_FILE_PATH, "r") as csv_file:
+            reader = csv.DictReader(csv_file)
 
-        return non_zero_count > 0
+            for row in reader:
+                if row["ID"] == specific_id:
+                    bbox = ast.literal_eval(row["bbox"])
+                    print(f"Found bbox {bbox} for ID: {specific_id}")
 
-    def calculate_offset(self, target_x, target_y):
-        """Calculate dynamic offsets based on target coordinates."""
-        x_offset = (target_x // 100) * -400  # Add 40 for every 100 x-coordinates
-        y_offset = (target_y // 100) * 20  # Add 20 for every 100 y-coordinates
-        return x_offset, y_offset
+                    x_min = int(bbox[0] * SCREEN_WIDTH)
+                    y_min = int(bbox[1] * SCREEN_HEIGHT)
+                    x_max = int(bbox[2] * SCREEN_WIDTH)
+                    y_max = int(bbox[3] * SCREEN_HEIGHT)
 
-    def click_on_bbox(self, bbox, click_delay=0.5):
-        """Send a BLE click command based on the bounding box coordinates."""
-        x_min = bbox[0] * self.screen_width
-        y_min = bbox[1] * self.screen_height
-        x_max = bbox[2] * self.screen_width
-        y_max = bbox[3] * self.screen_height
+                    x_center = (x_min + x_max) // 2
+                    y_center = (y_min + y_max) // 2
 
-        x_center = int((x_min + x_max) / 2)
-        y_center = int((y_min + y_max) / 2)
+                    return x_center, y_center
 
-        # Calculate offsets
-        x_offset, y_offset = self.calculate_offset(x_center, y_center)
-        x_center += x_offset
-        y_center += y_offset
+            print(f"Bounding box with ID '{specific_id}' not found in the CSV.")
+            return None
 
-        # Send BLE command
-        self.send_command(f"CLICK:{x_center},{y_center}")
-        time.sleep(click_delay)
+    except FileNotFoundError:
+        print(f"CSV file not found: {CSV_FILE_PATH}")
+    except Exception as e:
+        print(f"Failed to read CSV file: {e}")
+    return None
+def main():
+    # Initialize BLE connection
+    click_ds = ClickableDS(BLUETOOTH_COM_PORT, BAUD_RATE)
+    time.sleep(1)
 
-    def find_and_click(self, specific_id, specific_content=None):
-        """Find an element in the CSV and click its bounding box if visible."""
-        try:
-            with open(self.csv_file_path, "r") as csv_file:
-                reader = csv.DictReader(csv_file)
+    # Move to origin before typing
+    click_ds.move_to_origin()
+    time.sleep(1)
 
-                for row in reader:
-                    if row["ID"] == specific_id and (specific_content is None or row["content"] == specific_content):
-                        bbox = ast.literal_eval(row["bbox"])
-                        print(f"Found bbox {bbox}, ID: {row['ID']}, Content: {row['content']}")
+    try:
+        # Type the text
+        text = "1235 how are you my name is nasim nice to meet you 4455665656"
+        click_ds.send_keyboard_input(text)
+        print("Text typed successfully.")
+    except Exception as e:
+        print(f"Failed to type the text: {e}")
 
-                        if self.is_bbox_visible(bbox):
-                            print("Bounding box is visible. Performing click...")
-                            self.click_on_bbox(bbox)
-                        else:
-                            print("Bounding box is not visible on the current screen. Skipping click.")
-                        return True
+    if click_ds.ser:
+        click_ds.ser.close()
 
-                print(f"Element with ID '{specific_id}' and content '{specific_content}' not found in the CSV.")
-                return False
 
-        except FileNotFoundError:
-            print(f"CSV file not found: {self.csv_file_path}")
-        except Exception as e:
-            print(f"Failed to read CSV file: {e}")
-        return False
-
-# Example Usage
 if __name__ == "__main__":
-    csv_file = "output/parsed_content.csv"
-    ble_com_port = "COM14"
-    baud_rate = 115200
-
-    bb_click_ble = BBClickBLE(csv_file, ble_com_port, baud_rate)
-
-    # Example: Find and click a bounding box by ID
-    specific_id = "39"
-    specific_content = None  # Set content if needed
-    bb_click_ble.find_and_click(specific_id, specific_content)
+    main()

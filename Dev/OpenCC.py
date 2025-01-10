@@ -38,4 +38,4 @@ def open_capture_card_feed(capture_card_index=0):
     cv2.destroyAllWindows()
 
 # Call the function
-open_capture_card_feed(capture_card_index=0)  # Adjust the index if needed
+open_capture_card_feed(capture_card_index=1)  # Adjust the index if needed

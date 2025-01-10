@@ -21,7 +21,7 @@ from utils import (
 @dataclass
 class ProcessingConfig:
     """Configuration for single frame capture and processing."""
-    capture_card_index: int = 0
+    capture_card_index: int = 1
     resolution: Tuple[int, int] = (1920, 1080)
     output_dir: str = "output"
     model_path: str = "weights/icon_detect_v1_5/model_v1_5.pt"
@@ -46,7 +46,6 @@ class SingleFrameProcessor:
         self.caption_model_processor = self._load_caption_model()
 
     def setup_logging(self):
-        """Initialize logging configuration."""
         log_path = self.output_dir / 'processing.log'
         logging.basicConfig(
             level=logging.INFO,
@@ -111,7 +110,7 @@ class SingleFrameProcessor:
                 raise RuntimeError("Failed to capture frame")
             
             # Save frame
-            frame_path = self.output_dir / "captured_frame.png"
+            frame_path = self.output_dir / "raw_frame.png"
             cv2.imwrite(str(frame_path), frame)
             results['frame_path'] = str(frame_path)
             
@@ -156,7 +155,7 @@ class SingleFrameProcessor:
             decoded_image = Image.open(io.BytesIO(base64.b64decode(dino_labeled_img)))
             decoded_image.save(output_image_path)
             
-            output_csv_path = self.output_dir / "parsed_content.csv"
+            output_csv_path = self.output_dir / "bbox_content.csv"
             df = pd.DataFrame(parsed_content_list)
             df['ID'] = range(len(df))  # Add ID column
             df.to_csv(output_csv_path, index=False)

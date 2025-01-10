@@ -4,51 +4,44 @@ import numpy as np
 import serial
 import time
 
-
-BLUETOOTH_COM_PORT = "COM14"
+BLUETOOTH_COM_PORT = "COM4"
 BAUD_RATE = 115200
-
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 DISPLAY_WIDTH = 960
 DISPLAY_HEIGHT = 540
 
-
 # Basic offset
-BASE_X_OFFSET = 0
-BASE_Y_OFFSET = 0
-
+BASE_X_OFFSET = -10
+Y_OFFSET = -10
 
 def calculate_x_offset(x):
     """Calculate progressive X offset based on X coordinate"""
     # Start with base offset
     offset = BASE_X_OFFSET
-    # Add 40 for every 100 pixels
-    offset += 40 * (x // 100)
+    
+    # Add -15 for every 250 pixels
+    offset += -2  * (x // 400)    
     return offset
-
-
 def calculate_y_offset(y):
-    """Calculate progressive Y offset based on Y coordinate"""
+    """Calculate progressive X offset based on X coordinate"""
     # Start with base offset
-    offset = BASE_Y_OFFSET
-    # Add 20 for every 100 pixels
-    offset += 20 * (y // 100)
+    offset = Y_OFFSET
+    
+    # Add -15 for every 250 pixels
+    offset += 1 * (y // 300)
+    
     return offset
-
-
-
 ffmpeg_cmd = [
     'ffmpeg',
     '-f', 'dshow',
     '-rtbufsize', '100M',
-    '-i', 'video=USB3.0 Video',
+    '-i', 'video=USB3 Video',
     '-pix_fmt', 'bgr24',
     '-f', 'rawvideo',
     '-'
 ]
-
 
 class ClickMemory:
     def __init__(self):
@@ -66,13 +59,11 @@ class ClickMemory:
 
         return False
 
-
 def send_command(ser, cmd):
     """Send a command string over BLE."""
     ser.write((cmd + "\n").encode('utf-8'))
     print(f"Sent: {cmd}")  # Debug output
     time.sleep(0.1)
-
 
 def main():
     ser = serial.Serial(BLUETOOTH_COM_PORT, BAUD_RATE, timeout=1)
@@ -105,11 +96,9 @@ def main():
         # Apply offsets
         x_offset = calculate_x_offset(scaled_x)
         y_offset = calculate_y_offset(scaled_y)
+
         actual_x = scaled_x + x_offset
         actual_y = scaled_y + y_offset
-
-        # Debug output for troubleshooting
-        print(f"Display Y: {display_y}, Scaled Y: {scaled_y}, Offset Y: {y_offset}, Actual Y: {actual_y}")
 
         current_pos = (display_x, display_y)
         current_scaled_pos = (actual_x, actual_y)
@@ -122,7 +111,11 @@ def main():
                 last_pos = (display_x, display_y)
                 last_click_time = time.time()
                 print(f"Clicked at scaled coords: {actual_x},{actual_y}")
+                print(f"X offset applied: {x_offset}")  # Debug info
+                print(f"Y offset applied: {y_offset}")  # Debug info
 
+            else:
+                print("Click ignored – too soon or same spot as last time.")
 
     cv2.namedWindow("Capture Card Feed")
     cv2.setMouseCallback("Capture Card Feed", mouse_callback)
@@ -171,7 +164,6 @@ def main():
         ser.close()
         process.terminate()
         cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
